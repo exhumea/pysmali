@@ -52,6 +52,7 @@ EMPTY_METHV = MethodVisitor()
 EMPTY_FIELDV = FieldVisitor()
 EMPTY_CLASSV = ClassVisitor()
 
+
 class SmaliReader:
     """Basic implementation of a line-base Smali-SourceCode parser.
 
@@ -112,7 +113,7 @@ class SmaliReader:
         if self.errors not in ("ignore", "strict"):
             raise ValueError(f"Invalid error handler: {errors}")
 
-    def visit(self, source: io.IOBase, visitor: ClassVisitor) -> None:
+    def visit(self, source: io.IOBase | str | bytes, visitor: ClassVisitor) -> None:
         """Parses the given input which can be any readable source.
 
         :param source: the Smali source code
@@ -153,7 +154,9 @@ class SmaliReader:
         self._do_visit()
 
     @property
-    def _visitor(self) -> VisitorBase[ClassVisitor | FieldVisitor | MethodVisitor | AnnotationVisitor]:
+    def _visitor(
+        self,
+    ) -> VisitorBase[ClassVisitor | FieldVisitor | MethodVisitor | AnnotationVisitor]:
         """Returns the active visitor instance.
 
         :return: the active visitor.
@@ -298,7 +301,7 @@ class SmaliReader:
                 and value[-1] not in ('"', "'")
                 and "," in value
             ):
-                i_values.extend(value.split(","))
+                i_values.extend([x.strip() for x in value.split(",") if x.strip()])
             else:
                 i_values.append(value)
         return i_values
@@ -380,7 +383,7 @@ class SmaliReader:
         else:
             # Dynamic method calling, we just need to implement specific
             # token handling.
-            method = f'_handle_{statement.replace("-", "_")}'
+            method = f"_handle_{statement.replace('-', '_')}"
             callback = getattr(self, method, None)
             if callback is None:
                 raise SyntaxError(f"Invalid token: {method!r} - not implemented!")
@@ -608,7 +611,7 @@ class SmaliReader:
 
             # As we need the annotation value's name, we have to
             # use the cleaned line buffer in the current line object.
-            name = self.line.cleaned[:self.line.cleaned.find("=")].strip()
+            name = self.line.cleaned[: self.line.cleaned.find("=")].strip()
             flags = self._read_access_flags()
             access_flags = AccessType.get_flags(flags)
 
@@ -633,7 +636,7 @@ class SmaliReader:
         try:
             # As we need the annotation value's name, we have to
             # use the cleaned line buffer in the current line object.
-            name = self.line.cleaned[:self.line.cleaned.find("=")].strip()
+            name = self.line.cleaned[: self.line.cleaned.find("=")].strip()
 
             token = next(self.line)
             self._validate_token(token, Token.ENUM)
@@ -932,16 +935,18 @@ class SmaliReader:
         next(self.line)
 
         values = self._collect_values()
-        if len(values) != 3 and self.validate:
+        # .local <reg>, "<name>":<descriptor> [<full descriptor>]
+        if len(values) < 2 and self.validate:
             raise SyntaxError(
-                f'Expected 3 values in ".local" statement - got {len(values)}'
+                f'Expected at least two values in ".local" statement - got {len(values)}'
             )
 
         register = values[0]
         name, descriptor = values[1].split(":")
-        full_desc = values[2]
+        full_desc = values[2] if len(values) >= 3 else ""
         self._validate_descriptor(descriptor)
-        self._validate_descriptor(full_desc)
+        if full_desc:
+            self._validate_descriptor(full_desc)
 
         self._visitor.visit_local(register, name.strip('"'), descriptor, full_desc)
         self._publish_comment()

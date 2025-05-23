@@ -172,12 +172,12 @@ class Token(Enum):
     SUPER = "super"
     DEBUG = "debug"
 
-    def __eq__(self, other: str) -> bool:
+    def __eq__(self, other: object) -> bool:
         if isinstance(other, self.__class__):
             return super().__eq__(other)
         return self.value == other
 
-    def __ne__(self, other: str) -> bool:
+    def __ne__(self, other: object) -> bool:
         if isinstance(other, self.__class__):
             return super().__ne__(other)
         return self.value != other
@@ -192,7 +192,7 @@ class Token(Enum):
 class Line:
     """Simple peekable Iterator implementation."""
 
-    RE_EOL_COMMENT = re.compile(r"\s*#.*$")
+    RE_EOL_COMMENT = re.compile(r"\"(?:\\.|[^\"\\])*\"|(?P<comment>#.*)")
     """Pattern for EOL (end of line) comments"""
 
     _default = object()
@@ -245,15 +245,15 @@ class Line:
         self.eol_comment = None
         self.raw = line.rstrip()
         self.cleaned = self.raw.lstrip()
-        eol_match = Line.RE_EOL_COMMENT.search(self.cleaned)
+        eol_match = Line.RE_EOL_COMMENT.search(self.cleaned + "\n")
         if eol_match is not None:
-            start, end = eol_match.span()
-            if self.cleaned.count('"', 0, start) % 2 == 0:
+            comment = eol_match.group("comment")
+            if comment is not None:
                 # Remove the EOL comment and save it in a variable. Note
                 # that the visitor will be notified when StopIteration is
                 # raised.
-                self.eol_comment = eol_match.group(0).lstrip("# ")
-                self.cleaned = self.cleaned[:start] + self.cleaned[end:]
+                self.eol_comment = comment
+                self.cleaned = self.cleaned[: -len(comment)]
 
         self._elements = Line.split_line(self.cleaned)
         self._it = iter(self._elements)
